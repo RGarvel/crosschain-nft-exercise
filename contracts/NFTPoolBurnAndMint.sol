@@ -7,7 +7,7 @@ import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {OwnerIsCreator} from "@chainlink/contracts/src/v0.8/shared/access/OwnerIsCreator.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {MyToken} from "./MyToken.sol";
+import {WrappedMyToken} from "./WrappedMyToken.sol";
 /**
  * THIS IS AN EXAMPLE CONTRACT THAT USES HARDCODED VALUES FOR CLARITY.
  * THIS IS AN EXAMPLE CONTRACT THAT USES UN-AUDITED CODE.
@@ -15,7 +15,7 @@ import {MyToken} from "./MyToken.sol";
  */
 
 /// @title - A simple messenger contract for sending/receiving string data across chains.
-contract NFTPoolLockAndRelease is CCIPReceiver, OwnerIsCreator {
+contract NFTPoolBurnAndMint is CCIPReceiver, OwnerIsCreator {
   using SafeERC20 for IERC20;
 
   // Custom errors to provide more descriptive revert messages.
@@ -36,7 +36,7 @@ contract NFTPoolLockAndRelease is CCIPReceiver, OwnerIsCreator {
     address receiver,
     bytes text,
     address feeToken,
-    uint256 fees,
+    uint256 fees
   );
 
   // Event emitted when a message is received from another chain.
@@ -54,7 +54,11 @@ contract NFTPoolLockAndRelease is CCIPReceiver, OwnerIsCreator {
   string private s_lastReceivedText; // Store the last received text.
 
   IERC20 private s_linkToken;
-  MyToken public nft;
+  WrappedMyToken public wnft;
+  struct RequestData {
+    uint256 tokenId,
+    address newOwner,
+  }
 
   /// @notice Constructor initializes the contract with the router address.
   /// @param _router The address of the router contract.
@@ -62,10 +66,10 @@ contract NFTPoolLockAndRelease is CCIPReceiver, OwnerIsCreator {
   constructor(
     address _router,
     address _link,
-    address nftAddr
+    address wnftAddr
   ) CCIPReceiver(_router) {
     s_linkToken = IERC20(_link);
-    nft = MyToken(nftAddr);
+    wnft = WrappedMyToken(wnftAddr);
   }
 
   /// @dev Modifier that checks the receiver address is not 0.
@@ -83,7 +87,7 @@ contract NFTPoolLockAndRelease is CCIPReceiver, OwnerIsCreator {
     uint64 chainSelector, 
     address receiver) public returns(bytes32) {
       //transfoer NFT to this address to lock the NFT
-      nft.tranferFrom(msg.sender, address(this), tokenId);
+      wnft.tranferFrom(msg.sender, address(this), tokenId);
 
       //construct data to be sent
       bytes memory payload = abi.encode(tokenId, newOwner);
@@ -103,7 +107,7 @@ contract NFTPoolLockAndRelease is CCIPReceiver, OwnerIsCreator {
   function sendMessagePayLINK(
     uint64 _destinationChainSelector,
     address _receiver,
-    bytes memory _text
+    bytes memory _text,
   )
     internal
     returns (bytes32 messageId)
@@ -144,6 +148,15 @@ contract NFTPoolLockAndRelease is CCIPReceiver, OwnerIsCreator {
     internal
     override
   {
+    // uint256 tokenId, address newOwner
+    RequestData memory rd = abi.decode(any2EvmMessage.data, (RequestData));
+    uint256 tokenId = rd.tokenId;
+    address newOwner = rd.newOwner;
+
+    wnft.mintTokenWithSpecificTokenId(newOwner, tokenId);
+
+
+
     s_lastReceivedMessageId = any2EvmMessage.messageId; // fetch the messageId
     s_lastReceivedText = abi.decode(any2EvmMessage.data, (string)); // abi-decoding of the sent text
 
